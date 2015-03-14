@@ -17,11 +17,19 @@ import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.BeanPropertyItemSqlParameterSourceProvider;
 import org.springframework.batch.item.database.JdbcBatchItemWriter;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.batch.item.file.FlatFileItemReader;
+import org.springframework.batch.item.file.FlatFileItemWriter;
+import org.springframework.batch.item.file.mapping.BeanWrapperFieldSetMapper;
+import org.springframework.batch.item.file.mapping.DefaultLineMapper;
+import org.springframework.batch.item.file.transform.BeanWrapperFieldExtractor;
+import org.springframework.batch.item.file.transform.DelimitedLineAggregator;
+import org.springframework.batch.item.file.transform.DelimitedLineTokenizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.batch.test.JobLauncherTestUtils;
 
 /**
  * This class contains all the configuration of the Spring Batch application
@@ -35,6 +43,19 @@ import org.springframework.jdbc.datasource.DriverManagerDataSource;
 @EnableBatchProcessing
 public class SpringBatchTutorialConfiguration {
 
+	/**
+	 * Modes, should be injected as parameter TODO
+	 */
+	// private String mode = "custom";
+
+	private String mode = "mysql";
+
+	// private String mode = "mongo";
+
+	// private String mode = "flat";
+
+	// private String mode = "hsqldb";
+
 	/* ********************************************
 	 * READERS This section contains all the readers
 	 * ********************************************
@@ -42,35 +63,42 @@ public class SpringBatchTutorialConfiguration {
 
 	/**
 	 * 
-	 * @return flat file item reader (using an csv extractor)
-	 */
-	/*
-	 * @Bean public ItemReader<CustomPojo> reader() {
-	 * FlatFileItemReader<CustomPojo> reader = new
-	 * FlatFileItemReader<CustomPojo>(); reader.setResource(new
-	 * ClassPathResource("input.csv")); reader.setLineMapper(new
-	 * DefaultLineMapper<CustomPojo>() { { setLineTokenizer(new
-	 * DelimitedLineTokenizer() { { setNames(new String[] { "id", "description"
-	 * }); } }); setFieldSetMapper(new BeanWrapperFieldSetMapper<CustomPojo>() {
-	 * { setTargetType(CustomPojo.class); } }); } }); return reader; }
+	 * @return a reader
 	 */
 
-	/**
-	 * 
-	 * 
-	 * @return custom item reader (dummy), using an iterator within an internal
-	 *         list
-	 */
 	@Bean
 	public ItemReader<CustomPojo> reader() {
-		CustomItemReader reader = new CustomItemReader();
-		List<CustomPojo> pojos = new ArrayList<CustomPojo>();
-		pojos.add(new CustomPojo("1", "desc1"));
-		pojos.add(new CustomPojo("2", "desc2"));
-		pojos.add(new CustomPojo("3", "desc3"));
-		reader.setPojos(pojos);
-		reader.setIterator(reader.getPojos().iterator());
-		return reader;
+		if ("flat".equals(this.mode)) {
+			// flat file item reader (using an csv extractor)
+			FlatFileItemReader<CustomPojo> reader = new FlatFileItemReader<CustomPojo>();
+			reader.setResource(new ClassPathResource("input.csv"));
+			reader.setLineMapper(new DefaultLineMapper<CustomPojo>() {
+				{
+					setLineTokenizer(new DelimitedLineTokenizer() {
+						{
+							setNames(new String[] { "id", "description" });
+						}
+					});
+					setFieldSetMapper(new BeanWrapperFieldSetMapper<CustomPojo>() {
+						{
+							setTargetType(CustomPojo.class);
+						}
+					});
+				}
+			});
+			return reader;
+		} else {
+			// custom item reader (dummy), using an iterator within an internal
+			// list
+			CustomItemReader reader = new CustomItemReader();
+			List<CustomPojo> pojos = new ArrayList<CustomPojo>();
+			pojos.add(new CustomPojo("1", "desc1"));
+			pojos.add(new CustomPojo("2", "desc2"));
+			pojos.add(new CustomPojo("3", "desc3"));
+			reader.setPojos(pojos);
+			reader.setIterator(reader.getPojos().iterator());
+			return reader;
+		}
 	}
 
 	/* ********************************************
@@ -94,82 +122,54 @@ public class SpringBatchTutorialConfiguration {
 
 	/**
 	 * 
-	 * @param mysqlDataSource
-	 * @return mysql writer using a {@link JdbcBatchItemWriter}
-	 */
-	
-	/*@Bean
-	 * public ItemWriter<CustomPojo> writer(DataSource mysqlDataSource) {
-	 * JdbcBatchItemWriter<CustomPojo> writer = new
-	 * JdbcBatchItemWriter<CustomPojo>();
-	 * 
-	 * writer.setSql("INSERT INTO pojo (id, description) VALUES (:id, :description)"
-	 * ); writer.setDataSource(mysqlDataSource);
-	 * writer.setItemSqlParameterSourceProvider(new
-	 * BeanPropertyItemSqlParameterSourceProvider<CustomPojo>()); return writer;
-	 * }
-	 */
-	/**
-	 * 
-	 * @param mongoDataSource
-	 * @return a writer using the MongoItemWriter
-	 */
-	
-	/*
-	 * @Bean
-	 * public ItemWriter<CustomPojo> writer(DataSource mongoDataSource) {
-	 * MongoItemWriter<CustomPojo> writer = new MongoItemWriter<CustomPojo>();
-	 * writer.setCollection("testCollection");
-	 * 
-	 * return writer; }
-	 */
-	/**
-	 * 
-	 * @param dataSource
-	 * @return hsqldb writer using JdbcBatchItemWriter (the difference is the
-	 *         datasource)
-	 */
-	/*@Bean
-	 * public ItemWriter<CustomPojo> writer(DataSource dataSource) {
-	 * System.out.println("writer called"); JdbcBatchItemWriter<CustomPojo>
-	 * writer = new JdbcBatchItemWriter<CustomPojo>();
-	 * writer.setItemSqlParameterSourceProvider(new
-	 * BeanPropertyItemSqlParameterSourceProvider<CustomPojo>());
-	 * writer.setSql("INSERT INTO pojo (id, description) VALUES (:id, :description)"
-	 * ); writer.setDataSource(dataSource); return writer; }
-	 */
-	/**
-	 * 
 	 * @param dataSource
 	 * @return dummy item writer custom
 	 */
 	@Bean
 	public ItemWriter<CustomPojo> writer(DataSource dataSource) {
-		CustomItemWriter writer = new CustomItemWriter();
+		if ("hsqldb".equals(this.mode)) {
+			// hsqldb writer using JdbcBatchItemWriter (the difference is the
+			// datasource)
+			JdbcBatchItemWriter<CustomPojo> writer = new JdbcBatchItemWriter<CustomPojo>();
+			writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<CustomPojo>());
+			writer.setSql("INSERT INTO pojo (id, description) VALUES (:id, :description)");
+			writer.setDataSource(dataSource);
+			return writer;
+		} else if ("mysql".equals(this.mode)) {
+			JdbcBatchItemWriter<CustomPojo> writer = new JdbcBatchItemWriter<CustomPojo>();
 
-		return writer;
+			writer.setSql("INSERT INTO pojo (id, description) VALUES (:id, :description)");
+			writer.setDataSource(dataSource);
+			writer.setItemSqlParameterSourceProvider(new BeanPropertyItemSqlParameterSourceProvider<CustomPojo>());
+			return writer;
+		}
+		/*
+		 * else if ("mongo".equals(this.mode)) { // a writer using the
+		 * MongoItemWriter MongoItemWriter<CustomPojo> writer = new
+		 * MongoItemWriter<CustomPojo>();
+		 * writer.setCollection("testCollection"); return writer; }
+		 */
+		else if ("flat".equals(this.mode)) {
+			// FlatFileItemWriter writer
+			FlatFileItemWriter<CustomPojo> writer = new CustomFlatFileItemWriter();
+			writer.setResource(new ClassPathResource("output.csv"));
+
+			BeanWrapperFieldExtractor<CustomPojo> fieldExtractor = new CustomFieldExtractor();
+			fieldExtractor.setNames(new String[] { "id", "description" });
+
+			DelimitedLineAggregator<CustomPojo> delLineAgg = new CustomDelimitedAggregator();
+			delLineAgg.setDelimiter(",");
+			delLineAgg.setFieldExtractor(fieldExtractor);
+
+			writer.setLineAggregator(delLineAgg);
+			return writer;
+		} else {
+			// dummy custom writer
+			CustomItemWriter writer = new CustomItemWriter();
+			return writer;
+		}
 	}
 
-	/**
-	 * FlatFileItemWriter writer
-	 * 
-	 * @return
-	 */
-	/*
-	 * @Bean public ItemWriter<CustomPojo> writer() {
-	 * FlatFileItemWriter<CustomPojo> writer = new CustomFlatFileItemWriter();
-	 * writer.setResource(new ClassPathResource("output.csv"));
-	 * 
-	 * BeanWrapperFieldExtractor<CustomPojo> fieldExtractor = new
-	 * CustomFieldExtractor(); fieldExtractor.setNames(new String[] { "id",
-	 * "description" });
-	 * 
-	 * DelimitedLineAggregator<CustomPojo> delLineAgg = new
-	 * CustomDelimitedAggregator(); delLineAgg.setDelimiter(",");
-	 * delLineAgg.setFieldExtractor(fieldExtractor);
-	 * 
-	 * writer.setLineAggregator(delLineAgg); return writer; }
-	 */
 	/* ********************************************
 	 * JOBS ***************************************
 	 * ********************************************
@@ -233,6 +233,7 @@ public class SpringBatchTutorialConfiguration {
 	 * @return
 	 * @throws Exception
 	 */
+
 	/*
 	 * public MongoDbFactory mongoDbFactory() throws Exception { return new
 	 * SimpleMongoDbFactory(new MongoClient(), "testDB"); }
@@ -245,6 +246,7 @@ public class SpringBatchTutorialConfiguration {
 	 * @return MongoTemplate
 	 * @throws Exception
 	 */
+
 	/*
 	 * @Bean public MongoTemplate mongoTemplate(DataSource dataSource) throws
 	 * Exception { return new MongoTemplate(mongoDbFactory()); }
@@ -257,31 +259,46 @@ public class SpringBatchTutorialConfiguration {
 	 * @return
 	 * @throws SQLException
 	 */
-	/*@Bean
-	public DataSource mysqlDataSource() throws SQLException {
-		final DriverManagerDataSource dataSource = new DriverManagerDataSource();
-		dataSource.setDriverClassName("com.mysql.jdbc.Driver");
-		dataSource.setUrl("jdbc:mysql://localhost/spring_batch_annotations");
-		dataSource.setUsername("root");
-		dataSource.setPassword("root");
-		return dataSource;
-	}*/
+
+	@Bean
+	public DataSource dataSource() throws SQLException {
+		if ("mongo".equals(this.mode)) {
+			// mongo data source
+			final DriverManagerDataSource dataSource = new DriverManagerDataSource();
+			dataSource.setDriverClassName("com.mysql.jdbc.Driver");
+			dataSource
+					.setUrl("jdbc:mysql://localhost/spring_batch_annotations");
+			dataSource.setUsername("root");
+			dataSource.setPassword("root");
+			return dataSource;
+		} else if ("mysql".equals(this.mode)) {
+			// mysql data source
+			final DriverManagerDataSource dataSource = new DriverManagerDataSource();
+			dataSource.setDriverClassName("com.mysql.jdbc.Driver");
+			dataSource
+					.setUrl("jdbc:mysql://localhost/spring_batch_annotations");
+			dataSource.setUsername("root");
+			dataSource.setPassword("root");
+			return dataSource;
+		} else {
+			// hsqldb datasource
+			final DriverManagerDataSource dataSource = new DriverManagerDataSource();
+			dataSource.setDriverClassName("org.hsqldb.jdbcDriver");
+			dataSource.setUrl("jdbc:hsqldb:mem:test");
+			dataSource.setUsername("sa");
+			dataSource.setPassword("");
+			return dataSource;
+		}
+	}
 
 	/**
-	 * mysql datasource
+	 * jobLauncherTestUtils utility class for testing batches
 	 * 
-	 * 
-	 * @return
-	 * @throws SQLException
+	 * @return JobLauncherTestUtils
 	 */
-	/*@Bean
-	public DataSource mongoDataSource() throws SQLException {
-		final DriverManagerDataSource dataSource = new DriverManagerDataSource();
-		dataSource.setDriverClassName("com.mysql.jdbc.Driver");
-		dataSource.setUrl("jdbc:mysql://localhost/spring_batch_annotations");
-		dataSource.setUsername("root");
-		dataSource.setPassword("root");
-		return dataSource;
-	}*/
+	@Bean
+	public JobLauncherTestUtils jobLauncherTestUtils() {
+		return new JobLauncherTestUtils();
+	}
 
 }

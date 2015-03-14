@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS POJO;
+
+CREATE TABLE POJO  (
+    id VARCHAR(20),
+    description VARCHAR(20)
+);
